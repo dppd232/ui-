@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Integrated Inspection Dashboard</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f8f9fa; margin: 40px; color: #333; }
+        .section { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 30px; }
+        h1 { font-size: 24px; margin-bottom: 20px; }
+        h2 { font-size: 18px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+        th { text-align: left; padding: 12px; color: #888; background: #fafafa; border-bottom: 2px solid #eee; }
+        td { padding: 12px; border-bottom: 1px solid #eee; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; }
+        .PASS { background: #d4edda; color: #155724; }
+        .NG { background: #f8d7da; color: #721c24; }
+        
+        /* 버튼 스타일 */
+        .btn-run { background: #1a73e8; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+        .btn-view { background: #34495e; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .btn-run:hover, .btn-view:hover { opacity: 0.8; }
+        
+        /* 결과 이미지 미리보기 스타일 */
+        .res-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; cursor: pointer; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+
+    <h1>Inspection Monitoring Dashboard</h1>
+
+    <div class="section">
+        <h2>Available Images for Inspection</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Preview</th>
+                    <th>File Path</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for img in images %}
+                <tr>
+                    <td><img src="/data_img/{{ img | replace('\\', '/') }}" style="width:40px; height:40px; object-fit:cover; border-radius:4px;"></td>
+                    <td>{{ img }}</td>
+                    <td><button class="btn-run" onclick="runInspect('{{ img | replace('\\', '/') }}')">Run Inspection</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Integrated Real-time Logs & Results</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Result</th>
+                    <th>Client IP</th>
+                    <th>Time</th>
+                    <th>Status</th>
+                    <th>Score</th>
+                    <th>Processing</th>
+                    <th>Image Path</th>
+                </tr>
+            </thead>
+            <tbody id="log-body"></tbody>
+        </table>
+    </div>
+
+    <script>
+        // 서버에서 최신 로그를 가져와서 테이블을 업데이트함
+        async function fetchLogs() {
+            try {
+                const response = await fetch('/get_logs');
+                const data = await response.json();
+                const tbody = document.getElementById('log-body');
+                
+                tbody.innerHTML = data.logs.map(log => `
+                    <tr>
+                        <td>
+                            <img src="${log.result_url}" class="res-thumb" title="Click to enlarge" onclick="window.open('${log.result_url}')">
+                        </td>
+                        <td>${log.client}</td>
+                        <td>${log.timestamp}</td>
+                        <td><span class="badge ${log.status}">${log.status}</span></td>
+                        <td>${log.score}</td>
+                        <td>${log.processing_time}</td>
+                        <td style="color:#999; font-size:11px;">${log.image_path}</td>
+                    </tr>
+                `).join('');
+            } catch (e) { console.error("Log fetch failed", e); }
+        }
+
+        // 검사 수행 함수
+        async function runInspect(filename) {
+            try {
+                const response = await fetch(`/inspect/${encodeURIComponent(filename)}`);
+                const result = await response.json();
+                
+                if (result.status !== "Error") {
+                    // 검사 완료 후 즉시 로그 갱신
+                    fetchLogs();
+                    // (선택사항) 검사 완료 후 바로 결과 이미지를 새 창으로 띄우고 싶다면 아래 주석 해제
+                    // window.open(result.result_url);
+                } else {
+                    alert("Inspection Error: " + result.message);
+                }
+            } catch (e) { alert("Server connection failed"); }
+        }
+
+        // 2초마다 로그 자동 동기화 (다른 PC 결과도 확인 가능)
+        setInterval(fetchLogs, 2000);
+        fetchLogs(); // 초기 로딩
+    </script>
+</body>
+</html>
